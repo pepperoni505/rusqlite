@@ -1,3 +1,5 @@
+## This is a fork of Rusqlite v0.30.0 with changes to the sqlite3.c file to make it compatible with MSFS.
+
 # Rusqlite
 
 [![Latest Version](https://img.shields.io/crates/v/rusqlite.svg)](https://crates.io/crates/rusqlite)
