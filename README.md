@@ -1,4 +1,4 @@
-## This is a fork of Rusqlite v0.30.0 with changes to the sqlite3.c file to make it compatible with MSFS.
+## This is a fork of Rusqlite with changes to the sqlite3.c file to make it compatible with MSFS
 
 # Rusqlite
 
