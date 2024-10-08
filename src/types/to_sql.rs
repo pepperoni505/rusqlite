@@ -3,7 +3,6 @@ use super::{Null, Value, ValueRef};
 use crate::vtab::array::Array;
 use crate::{Error, Result};
 use std::borrow::Cow;
-use std::convert::TryFrom;
 
 /// `ToSqlOutput` represents the possible output types for implementers of the
 /// [`ToSql`] trait.
@@ -21,6 +20,11 @@ pub enum ToSqlOutput<'a> {
     #[cfg(feature = "blob")]
     #[cfg_attr(docsrs, doc(cfg(feature = "blob")))]
     ZeroBlob(i32),
+
+    /// n-th arg of an SQL scalar function
+    #[cfg(feature = "functions")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "functions")))]
+    Arg(usize),
 
     /// `feature = "array"`
     #[cfg(feature = "array")]
@@ -107,6 +111,8 @@ impl ToSql for ToSqlOutput<'_> {
 
             #[cfg(feature = "blob")]
             ToSqlOutput::ZeroBlob(i) => ToSqlOutput::ZeroBlob(i),
+            #[cfg(feature = "functions")]
+            ToSqlOutput::Arg(i) => ToSqlOutput::Arg(i),
             #[cfg(feature = "array")]
             ToSqlOutput::Array(ref a) => ToSqlOutput::Array(a.clone()),
         })
@@ -304,9 +310,23 @@ impl<T: ToSql> ToSql for Option<T> {
 
 #[cfg(test)]
 mod test {
-    use super::ToSql;
+    use super::{ToSql, ToSqlOutput};
+    use crate::{types::Value, types::ValueRef, Result};
 
     fn is_to_sql<T: ToSql>() {}
+
+    #[test]
+    fn to_sql() -> Result<()> {
+        assert_eq!(
+            ToSqlOutput::Borrowed(ValueRef::Null).to_sql()?,
+            ToSqlOutput::Borrowed(ValueRef::Null)
+        );
+        assert_eq!(
+            ToSqlOutput::Owned(Value::Null).to_sql()?,
+            ToSqlOutput::Borrowed(ValueRef::Null)
+        );
+        Ok(())
+    }
 
     #[test]
     fn test_integral_types() {

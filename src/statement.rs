@@ -1,4 +1,3 @@
-use std::iter::IntoIterator;
 use std::os::raw::{c_int, c_void};
 #[cfg(feature = "array")]
 use std::rc::Rc;
@@ -442,7 +441,8 @@ impl Statement<'_> {
     #[inline]
     pub fn parameter_name(&self, index: usize) -> Option<&'_ str> {
         self.stmt.bind_parameter_name(index as i32).map(|name| {
-            str::from_utf8(name.to_bytes()).expect("Invalid UTF-8 sequence in parameter name")
+            name.to_str()
+                .expect("Invalid UTF-8 sequence in parameter name")
         })
     }
 
@@ -561,7 +561,7 @@ impl Statement<'_> {
     ///
     /// Any unbound parameters will have `NULL` as their value.
     ///
-    /// This should not generally be used outside of special cases, and
+    /// This should not generally be used outside special cases, and
     /// functions in the [`Statement::execute`] family should be preferred.
     ///
     /// # Failure
@@ -580,7 +580,7 @@ impl Statement<'_> {
     ///
     /// Any unbound parameters will have `NULL` as their value.
     ///
-    /// This should not generally be used outside of special cases, and
+    /// This should not generally be used outside special cases, and
     /// functions in the [`Statement::query`] family should be preferred.
     ///
     /// Note that if the SQL does not return results, [`Statement::raw_execute`]
@@ -605,6 +605,13 @@ impl Statement<'_> {
                 return self
                     .conn
                     .decode_result(unsafe { ffi::sqlite3_bind_zeroblob(ptr, col as c_int, len) });
+            }
+            #[cfg(feature = "functions")]
+            ToSqlOutput::Arg(_) => {
+                return Err(Error::SqliteFailure(
+                    ffi::Error::new(ffi::SQLITE_MISUSE),
+                    Some(format!("Unsupported value \"{value:?}\"")),
+                ));
             }
             #[cfg(feature = "array")]
             ToSqlOutput::Array(a) => {
@@ -680,7 +687,7 @@ impl Statement<'_> {
 
     #[cfg(not(feature = "extra_check"))]
     #[inline]
-    #[allow(clippy::unnecessary_wraps)]
+    #[expect(clippy::unnecessary_wraps)]
     fn check_update(&self) -> Result<()> {
         Ok(())
     }
@@ -734,7 +741,7 @@ impl Statement<'_> {
 
     #[cfg(not(feature = "extra_check"))]
     #[inline]
-    #[allow(clippy::unnecessary_wraps)]
+    #[expect(clippy::unnecessary_wraps)]
     pub(crate) fn check_no_tail(&self) -> Result<()> {
         Ok(())
     }
@@ -760,7 +767,7 @@ impl fmt::Debug for Statement<'_> {
         let sql = if self.stmt.is_null() {
             Ok("")
         } else {
-            str::from_utf8(self.stmt.sql().unwrap().to_bytes())
+            self.stmt.sql().unwrap().to_str()
         };
         f.debug_struct("Statement")
             .field("conn", self.conn)
@@ -771,7 +778,7 @@ impl fmt::Debug for Statement<'_> {
 }
 
 impl Drop for Statement<'_> {
-    #[allow(unused_must_use)]
+    #[expect(unused_must_use)]
     #[inline]
     fn drop(&mut self) {
         self.finalize_();
@@ -869,23 +876,23 @@ impl Statement<'_> {
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum StatementStatus {
-    /// Equivalent to SQLITE_STMTSTATUS_FULLSCAN_STEP
+    /// Equivalent to `SQLITE_STMTSTATUS_FULLSCAN_STEP`
     FullscanStep = 1,
-    /// Equivalent to SQLITE_STMTSTATUS_SORT
+    /// Equivalent to `SQLITE_STMTSTATUS_SORT`
     Sort = 2,
-    /// Equivalent to SQLITE_STMTSTATUS_AUTOINDEX
+    /// Equivalent to `SQLITE_STMTSTATUS_AUTOINDEX`
     AutoIndex = 3,
-    /// Equivalent to SQLITE_STMTSTATUS_VM_STEP
+    /// Equivalent to `SQLITE_STMTSTATUS_VM_STEP`
     VmStep = 4,
-    /// Equivalent to SQLITE_STMTSTATUS_REPREPARE (3.20.0)
+    /// Equivalent to `SQLITE_STMTSTATUS_REPREPARE` (3.20.0)
     RePrepare = 5,
-    /// Equivalent to SQLITE_STMTSTATUS_RUN (3.20.0)
+    /// Equivalent to `SQLITE_STMTSTATUS_RUN` (3.20.0)
     Run = 6,
-    /// Equivalent to SQLITE_STMTSTATUS_FILTER_MISS
+    /// Equivalent to `SQLITE_STMTSTATUS_FILTER_MISS`
     FilterMiss = 7,
-    /// Equivalent to SQLITE_STMTSTATUS_FILTER_HIT
+    /// Equivalent to `SQLITE_STMTSTATUS_FILTER_HIT`
     FilterHit = 8,
-    /// Equivalent to SQLITE_STMTSTATUS_MEMUSED (3.20.0)
+    /// Equivalent to `SQLITE_STMTSTATUS_MEMUSED` (3.20.0)
     MemUsed = 99,
 }
 
@@ -1012,8 +1019,8 @@ mod test {
         let doubled_id: i32 = rows.next().unwrap()?;
         assert_eq!(1, doubled_id);
 
-        // second row should be Err
-        #[allow(clippy::match_wild_err_arm)]
+        // second row should be an `Err`
+        #[expect(clippy::match_wild_err_arm)]
         match rows.next().unwrap() {
             Ok(_) => panic!("invalid Ok"),
             Err(Error::SqliteSingleThreadedMode) => (),
@@ -1353,7 +1360,7 @@ mod test {
     fn test_error_offset() -> Result<()> {
         use crate::ffi::ErrorCode;
         let db = Connection::open_in_memory()?;
-        let r = db.execute_batch("SELECT CURRENT_TIMESTANP;");
+        let r = db.execute_batch("SELECT INVALID_FUNCTION;");
         match r.unwrap_err() {
             Error::SqlInputError { error, offset, .. } => {
                 assert_eq!(error.code, ErrorCode::Unknown);

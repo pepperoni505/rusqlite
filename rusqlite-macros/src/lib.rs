@@ -1,9 +1,11 @@
 //! Private implementation details of `rusqlite`.
 
+use litrs::StringLit;
 use proc_macro::{Delimiter, Group, Literal, Span, TokenStream, TokenTree};
 
 use fallible_iterator::FallibleIterator;
-use sqlite3_parser::ast::{ParameterInfo, ToTokens};
+use sqlite3_parser::ast::fmt::ToTokens;
+use sqlite3_parser::ast::ParameterInfo;
 use sqlite3_parser::lexer::sql::Parser;
 
 // https://internals.rust-lang.org/t/custom-error-diagnostics-with-procedural-macros-on-almost-stable-rust/8113
@@ -11,29 +13,29 @@ use sqlite3_parser::lexer::sql::Parser;
 #[doc(hidden)]
 #[proc_macro]
 pub fn __bind(input: TokenStream) -> TokenStream {
-    try_bind(input).unwrap_or_else(|msg| parse_ts(&format!("compile_error!({:?})", msg)))
+    try_bind(input).unwrap_or_else(|msg| parse_ts(&format!("compile_error!({msg:?})")))
 }
 
 type Result<T> = std::result::Result<T, String>;
 
 fn try_bind(input: TokenStream) -> Result<TokenStream> {
     let (stmt, literal) = {
-        let mut iter = input.clone().into_iter();
+        let mut iter = input.into_iter();
         let stmt = iter.next().unwrap();
         let literal = iter.next().unwrap();
         assert!(iter.next().is_none());
         (stmt, literal)
     };
 
-    let literal = match into_literal(&literal) {
-        Some(it) => it,
-        None => return Err("expected a plain string literal".to_string()),
-    };
-    let sql = literal.to_string();
-    if !sql.starts_with('"') {
+    let Some(literal) = into_literal(&literal) else {
         return Err("expected a plain string literal".to_string());
-    }
-    let sql = strip_matches(&sql, "\"");
+    };
+    let call_site = literal.span();
+    let string_lit = match StringLit::try_from(literal) {
+        Ok(string_lit) => string_lit,
+        Err(e) => return Ok(e.to_compile_error()),
+    };
+    let sql = string_lit.value();
 
     let mut parser = Parser::new(sql.as_bytes());
     let ast = match parser.next() {
@@ -48,13 +50,12 @@ fn try_bind(input: TokenStream) -> Result<TokenStream> {
         return Err(err.to_string());
     }
     if info.count == 0 {
-        return Ok(input);
+        return Ok(TokenStream::new());
     }
     if info.count as usize != info.names.len() {
         return Err("Mixing named and numbered parameters is not supported.".to_string());
     }
 
-    let call_site = literal.span();
     let mut res = TokenStream::new();
     for (i, name) in info.names.iter().enumerate() {
         res.extend(Some(stmt.clone()));
@@ -83,13 +84,6 @@ fn into_literal(ts: &TokenTree) -> Option<Literal> {
         },
         _ => None,
     }
-}
-
-fn strip_matches<'a>(s: &'a str, pattern: &str) -> &'a str {
-    s.strip_prefix(pattern)
-        .unwrap_or(s)
-        .strip_suffix(pattern)
-        .unwrap_or(s)
 }
 
 fn respan(ts: TokenStream, span: Span) -> TokenStream {

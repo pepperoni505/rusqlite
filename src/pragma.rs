@@ -12,8 +12,8 @@ pub struct Sql {
 }
 
 impl Sql {
-    pub fn new() -> Sql {
-        Sql { buf: String::new() }
+    pub fn new() -> Self {
+        Self { buf: String::new() }
     }
 
     pub fn push_pragma(
@@ -65,6 +65,13 @@ impl Sql {
             ToSqlOutput::Owned(ref v) => ValueRef::from(v),
             #[cfg(feature = "blob")]
             ToSqlOutput::ZeroBlob(_) => {
+                return Err(Error::SqliteFailure(
+                    ffi::Error::new(ffi::SQLITE_MISUSE),
+                    Some(format!("Unsupported value \"{value:?}\"")),
+                ));
+            }
+            #[cfg(feature = "functions")]
+            ToSqlOutput::Arg(_) => {
                 return Err(Error::SqliteFailure(
                     ffi::Error::new(ffi::SQLITE_MISUSE),
                     Some(format!("Unsupported value \"{value:?}\"")),
