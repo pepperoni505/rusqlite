@@ -118,7 +118,7 @@ mod build_bundled {
         println!("cargo:rerun-if-changed={lib_name}/sqlite3.c");
         println!("cargo:rerun-if-changed=sqlite3/wasm32-wasi-vfs.c");
 
-        let msfs_sdk = env!("MSFS_SDK").unwrap();
+        let msfs_sdk = env!("MSFS_SDK");
 
         let mut cfg = cc::Build::new();
         cfg.file(format!("{lib_name}/sqlite3.c"))
